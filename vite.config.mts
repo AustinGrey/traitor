@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
 				entry: "src/main.ts",
 				formats: ["cjs"],
 				fileName: () => "main.js",
+				cssFileName: "styles",
 			},
 			outDir: ".",
 			emptyOutDir: false,
