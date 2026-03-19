@@ -1,4 +1,6 @@
 import { builtinModules } from "node:module";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { defineConfig } from "vite";
 
 const banner = `/*
@@ -11,6 +13,23 @@ export default defineConfig(({ mode }) => {
 	const prod = mode === "production";
 
 	return {
+		plugins: [
+			{
+				name: "obsidian-main-banner",
+				apply: "build",
+				enforce: "post",
+				async closeBundle() {
+					const outputPath = path.resolve(process.cwd(), "main.js");
+					const source = await readFile(outputPath, "utf8");
+
+					if (source.startsWith(banner)) {
+						return;
+					}
+
+					await writeFile(outputPath, `${banner}${source}`, "utf8");
+				},
+			},
+		],
 		build: {
 			lib: {
 				entry: "src/main.ts",
@@ -41,7 +60,6 @@ export default defineConfig(({ mode }) => {
 				],
 				output: {
 					exports: "default",
-					banner,
 				},
 			},
 		},
