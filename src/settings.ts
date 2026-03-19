@@ -1,21 +1,21 @@
-import { App, PluginSettingTab } from "obsidian";
+import {App, PluginSettingTab, Setting} from "obsidian";
 import { createApp, type App as VueApp } from "vue";
-import MyPlugin from "./main";
+import Traitor from "./main";
 import SampleSettingsView from "./ui/SampleSettingsView.vue";
 
-export interface MyPluginSettings {
+export interface TraitorSettings {
 	mySetting: string;
 }
 
-export const DEFAULT_SETTINGS: MyPluginSettings = {
+export const DEFAULT_SETTINGS: TraitorSettings = {
 	mySetting: 'default'
 }
 
-export class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+export class TraitorSettingsTab extends PluginSettingTab {
+	plugin: Traitor;
 	private vueApp: VueApp<Element> | null = null;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: Traitor) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -27,7 +27,7 @@ export class SampleSettingTab extends PluginSettingTab {
 		this.vueApp?.unmount();
 		this.vueApp = null;
 
-		containerEl.createEl("h2", { text: "Sample settings" });
+		new Setting(containerEl).setName("Traitor settings");
 		const mountEl = containerEl.createDiv({ cls: "traitor-settings-root" });
 
 		this.vueApp = createApp(SampleSettingsView, {
