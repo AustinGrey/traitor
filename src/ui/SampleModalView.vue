@@ -5,12 +5,14 @@
 	</div>
 </template>
 
-<style>
-.traitor-modal h2 {
-	margin: 0 0 0.5rem;
-}
+<style scoped lang="scss">
+.traitor-modal {
+	h2 {
+		margin: 0 0 0.5rem;
+	}
 
-.traitor-modal p {
-	margin: 0;
+	p {
+		margin: 0;
+	}
 }
 </style>

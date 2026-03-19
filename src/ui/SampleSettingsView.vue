@@ -37,20 +37,20 @@ const persist = async () => {
 	</div>
 </template>
 
-<style>
+<style scoped lang="scss">
 .traitor-settings {
 	display: flex;
 	flex-direction: column;
 	gap: 0.5rem;
 	max-width: 32rem;
-}
 
-.traitor-settings-description {
-	margin: 0;
-	color: var(--text-muted);
-}
+	.traitor-settings-description {
+		margin: 0;
+		color: var(--text-muted);
+	}
 
-.traitor-settings-input {
-	width: 100%;
+	.traitor-settings-input {
+		width: 100%;
+	}
 }
 </style>
