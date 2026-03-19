@@ -1,8 +1,27 @@
-/*
+.traitor-modal-root {
+	padding: 0.5rem 0;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.traitor-modal h2 {
+	margin: 0 0 0.5rem;
+}
 
-If your plugin does not need CSS, delete this file.
+.traitor-modal p {
+	margin: 0;
+}
 
-*/
+.traitor-settings {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	max-width: 32rem;
+}
+
+.traitor-settings-description {
+	margin: 0;
+	color: var(--text-muted);
+}
+
+.traitor-settings-input {
+	width: 100%;
+}

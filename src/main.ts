@@ -1,7 +1,7 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin } from "obsidian";
+import { createApp, type App as VueApp } from "vue";
 import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
-
-// Remember to rename these classes and interfaces!
+import SampleModalView from "./ui/SampleModalView.vue";
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
@@ -83,16 +83,25 @@ export default class MyPlugin extends Plugin {
 }
 
 class SampleModal extends Modal {
+	private vueApp: VueApp<Element> | null = null;
+
 	constructor(app: App) {
 		super(app);
 	}
 
 	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+		const { contentEl } = this;
+		contentEl.empty();
+
+		const mountEl = contentEl.createDiv({ cls: "traitor-modal-root" });
+		this.vueApp = createApp(SampleModalView);
+		this.vueApp.mount(mountEl);
 	}
 
 	onClose() {
+		this.vueApp?.unmount();
+		this.vueApp = null;
+
 		const {contentEl} = this;
 		contentEl.empty();
 	}
