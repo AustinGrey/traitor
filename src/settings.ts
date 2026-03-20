@@ -1,19 +1,16 @@
-import {App, PluginSettingTab, Setting} from "obsidian";
-import { createApp, type App as VueApp } from "vue";
+import { App, PluginSettingTab, Setting } from "obsidian";
 import Traitor from "./main";
-import SampleSettingsView from "./ui/SampleSettingsView.vue";
 
 export interface TraitorSettings {
-	mySetting: string;
+	traitsFolder: string;
 }
 
 export const DEFAULT_SETTINGS: TraitorSettings = {
-	mySetting: 'default'
-}
+	traitsFolder: "_traits",
+};
 
 export class TraitorSettingsTab extends PluginSettingTab {
 	plugin: Traitor;
-	private vueApp: VueApp<Element> | null = null;
 
 	constructor(app: App, plugin: Traitor) {
 		super(app, plugin);
@@ -22,26 +19,27 @@ export class TraitorSettingsTab extends PluginSettingTab {
 
 	display(): void {
 		const { containerEl } = this;
-
 		containerEl.empty();
-		this.vueApp?.unmount();
-		this.vueApp = null;
 
-		new Setting(containerEl).setName("Traitor settings");
-		const mountEl = containerEl.createDiv({ cls: "traitor-settings-root" });
+		containerEl.createEl("h2", { text: "Traitor settings" });
 
-		this.vueApp = createApp(SampleSettingsView, {
-			initialValue: this.plugin.settings.mySetting,
-			onSave: async (value: string) => {
-				this.plugin.settings.mySetting = value;
-				await this.plugin.saveSettings();
-			},
+		new Setting(containerEl)
+			.setName("Traits folder")
+			.setDesc("Folder that contains trait definition markdown files.")
+			.addText((text) =>
+				text
+					.setPlaceholder("Traits")
+					.setValue(this.plugin.settings.traitsFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.traitsFolder = value.trim() || DEFAULT_SETTINGS.traitsFolder;
+						await this.plugin.saveSettings();
+						await this.plugin.refreshTraitDefinitions();
+						this.plugin.refreshWarningsForActiveView();
+					}),
+			);
+
+		containerEl.createEl("p", {
+			text: "Trait file format: use frontmatter with trait, description, and a properties map. Example: properties.status.type = string and properties.status.required = true.",
 		});
-		this.vueApp.mount(mountEl);
-	}
-
-	hide(): void {
-		this.vueApp?.unmount();
-		this.vueApp = null;
 	}
 }

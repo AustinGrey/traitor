@@ -1,66 +1,195 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin } from "obsidian";
-import { createApp, type App as VueApp } from "vue";
-import {DEFAULT_SETTINGS, TraitorSettings, TraitorSettingsTab} from "./settings";
-import SampleModalView from "./ui/SampleModalView.vue";
+import { MarkdownView, Modal, Notice, Plugin, TFile, TextComponent } from "obsidian";
+import { DEFAULT_SETTINGS, TraitorSettings, TraitorSettingsTab } from "./settings";
+import { TraitService } from "./traits/trait-service";
+import { TraitPickerModal } from "./ui/trait-picker-modal";
+import { WarningBannerController } from "./ui/warning-banner";
+import "./plugin.css";
 
 export default class Traitor extends Plugin {
 	settings: TraitorSettings;
+	private traitService: TraitService;
+	private warningBanner = new WarningBannerController();
 
 	async onload() {
 		await this.loadSettings();
+		this.traitService = new TraitService(this.app, {
+			traitsFolder: this.settings.traitsFolder,
+		});
+		await this.refreshTraitDefinitions();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		this.addRibbonIcon("target", "Set traits for current note", () => {
+			void this.openTraitPickerForActiveFile();
 		});
 
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
+			id: "set-traits-on-current-note",
+			name: "Set traits on current note",
+			callback: () => void this.openTraitPickerForActiveFile(),
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
+		this.addCommand({
+			id: "create-trait-definition-file",
+			name: "Create trait definition file",
+			callback: () => {
+				new CreateTraitModal(this, async (traitName) => {
+					const file = await this.traitService.createTraitDefinitionFile(traitName);
+					await this.refreshTraitDefinitions();
+					new Notice(`Trait definition ready: ${file.path}`);
+					await this.app.workspace.getLeaf(true).openFile(file);
+				}).open();
+			},
+		});
+
+		this.registerEvent(
+			this.app.workspace.on("file-open", () => {
+				this.refreshWarningsForActiveView();
+			}),
+		);
+		this.registerEvent(
+			this.app.metadataCache.on("changed", async (file) => {
+				if (!file.path.startsWith(`${this.traitService.getTraitsFolder()}/`)) {
+					this.refreshWarningsForActiveView();
+					return;
+				}
+
+				await this.refreshTraitDefinitions();
+				this.refreshWarningsForActiveView();
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("create", async (file) => {
+				if (!(file instanceof TFile) || file.extension !== "md") {
+					return;
+				}
+				if (!file.path.startsWith(`${this.traitService.getTraitsFolder()}/`)) {
+					return;
+				}
+
+				await this.refreshTraitDefinitions();
+				this.refreshWarningsForActiveView();
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("delete", async (file) => {
+				if (!(file instanceof TFile) || file.extension !== "md") {
+					return;
+				}
+				if (!file.path.startsWith(`${this.traitService.getTraitsFolder()}/`)) {
+					return;
+				}
+
+				await this.refreshTraitDefinitions();
+				this.refreshWarningsForActiveView();
+			}),
+		);
+
 		this.addSettingTab(new TraitorSettingsTab(this.app, this));
+		this.refreshWarningsForActiveView();
 	}
 
 	onunload() {
+		this.clearAllWarningBanners();
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<TraitorSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<TraitorSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-}
 
-class SampleModal extends Modal {
-	private vueApp: VueApp<Element> | null = null;
-
-	constructor(app: App) {
-		super(app);
+	async refreshTraitDefinitions(): Promise<void> {
+		this.traitService.setTraitsFolder(this.settings.traitsFolder);
+		await this.traitService.refreshTraits();
 	}
 
-	onOpen() {
+	refreshWarningsForActiveView(): void {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view || !(view.file instanceof TFile) || view.file.extension !== "md") {
+			return;
+		}
+
+		const warnings = this.traitService.validateFile(view.file);
+		this.warningBanner.update(view, warnings);
+	}
+
+	private clearAllWarningBanners(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view;
+			if (view instanceof MarkdownView) {
+				this.warningBanner.clear(view);
+			}
+		}
+	}
+
+	private async openTraitPickerForActiveFile(): Promise<void> {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view || !view.file) {
+			new Notice("Open a markdown note first.");
+			return;
+		}
+
+		await this.refreshTraitDefinitions();
+		const file = view.file;
+		const traitNames = this.traitService.getTraitNames();
+		const selectedTraits = this.traitService.getTraitsForFile(file);
+
+		new TraitPickerModal(this.app, {
+			traitNames,
+			selectedTraits,
+			onSave: async (nextTraits) => {
+				await this.traitService.setTraitsForFile(file, nextTraits);
+				this.refreshWarningsForActiveView();
+				new Notice("Traits updated.");
+			},
+			onCreateTrait: async () => {
+				new CreateTraitModal(this, async (name) => {
+					const created = await this.traitService.createTraitDefinitionFile(name);
+					await this.refreshTraitDefinitions();
+					new Notice(`Trait definition ready: ${created.path}`);
+					await this.app.workspace.getLeaf(true).openFile(created);
+				}).open();
+			},
+		}).open();
+	}
+}
+
+class CreateTraitModal extends Modal {
+	private readonly plugin: Traitor;
+	private readonly onSubmit: (traitName: string) => Promise<void>;
+
+	constructor(plugin: Traitor, onSubmit: (traitName: string) => Promise<void>) {
+		super(plugin.app);
+		this.plugin = plugin;
+		this.onSubmit = onSubmit;
+	}
+
+	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		const mountEl = contentEl.createDiv({ cls: "traitor-modal-root" });
-		this.vueApp = createApp(SampleModalView);
-		this.vueApp.mount(mountEl);
-	}
+		contentEl.createEl("h2", { text: "Create trait definition file" });
+		contentEl.createEl("p", {
+			text: `Trait files are stored in "${this.plugin.settings.traitsFolder}".`,
+		});
 
-	onClose() {
-		this.vueApp?.unmount();
-		this.vueApp = null;
+		let traitName = "";
+		new TextComponent(contentEl)
+			.setPlaceholder("person")
+			.onChange((value) => {
+				traitName = value;
+			})
+			.inputEl.focus();
 
-		const {contentEl} = this;
-		contentEl.empty();
+		contentEl.createEl("button", {
+			text: "Create",
+			cls: "mod-cta",
+		}).addEventListener("click", async () => {
+			await this.onSubmit(traitName);
+			this.close();
+		});
 	}
 }
