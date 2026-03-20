@@ -1,90 +1,106 @@
-# Obsidian Sample Plugin
+# Traitor
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+Define reusable traits and validate your note frontmatter against trait requirements.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+Traitor helps you keep metadata consistent across your vault. You can assign one or more traits to a note, and Traitor warns you when required properties are missing or have the wrong type.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## Why use Traitor?
 
-## First time developing plugins?
+- Reuse metadata rules across many notes (people, projects, books, etc.)
+- Catch mistakes early with in-editor warning banners
+- Keep your frontmatter clean and predictable
+- Apply traits through a picker instead of manually editing `traits:`
 
-Quick starting guide for new plugin devs:
+## What it does
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+- Adds a ribbon action and command to set traits on the current note
+- Lets you create trait definition files from inside Obsidian
+- Validates notes against trait-defined property rules
+- Shows clear warnings when:
+  - a trait is referenced but has no definition file
+  - a required property is missing
+  - a property value has the wrong type
+  - a string value does not match a required regex pattern
 
-## Releasing new releases
+## Installation
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+### From Community Plugins (when listed)
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+1. Open **Settings -> Community plugins**
+2. Select **Browse**
+3. Search for **Traitor**
+4. Install and enable
 
-## Adding your plugin to the community plugin list
+### Manual install
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+1. Download `manifest.json` and `main.js` from the latest release
+2. Create this folder in your vault:
+   `.obsidian/plugins/traitor/`
+3. Copy both files into that folder
+4. Reload Obsidian
+5. Enable **Traitor** in **Settings -> Community plugins**
 
-## How to use
+## Quick start
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+1. Run the command **Traitor: Create trait definition file**
+2. Name it (for example `person`)
+3. Edit the generated file in your traits folder
+4. Open a note and run **Traitor: Set traits on current note**
+5. Select one or more traits and save
+6. Fill in required frontmatter fields until warnings disappear
 
-## Manually installing the plugin
+## Trait definition format
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+Trait definition files are markdown notes in your configured traits folder (default: `_traits`), with frontmatter like this:
 
-## Improve code quality with eslint
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+```yaml
+---
+trait: person
+description: Notes about people
+properties:
+  status:
+    type: string
+    required: true
+  birthday:
+    type: date
+    required: false
+  email:
+    type: string
+    required: false
+    pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+---
 ```
 
-If you have multiple URLs, you can also do:
+Supported property types:
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
+- `string`
+- `number`
+- `boolean`
+- `array`
+- `date` (valid date string)
+
+## Note frontmatter example
+
+```yaml
+---
+traits:
+  - person
+status: active
+birthday: 1993-07-16
+email: hello@example.com
+---
 ```
 
-## API Documentation
+## Commands
 
-See https://docs.obsidian.md
+- **Set traits on current note**
+- **Create trait definition file**
+
+## Settings
+
+- **Traits folder**: folder containing your trait definition files (default: `_traits`)
+
+## Compatibility
+
+- Minimum Obsidian version: `0.15.0`
+- Desktop and mobile supported
