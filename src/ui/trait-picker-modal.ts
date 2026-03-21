@@ -5,6 +5,7 @@ import TraitPicker from "./TraitPicker.vue";
 interface TraitPickerModalOptions {
 	traitNames: string[];
 	selectedTraits: string[];
+	tagPrefix: string;
 	onSave: (selectedTraits: string[]) => Promise<void>;
 	onCreateTrait: () => Promise<void>;
 }
@@ -22,6 +23,7 @@ export class TraitPickerModal extends Modal {
 		this.vueApp = createApp(TraitPicker, {
 			traitNames: this.options.traitNames,
 			initialSelectedTraits: this.options.selectedTraits,
+			tagPrefix: this.options.tagPrefix,
 			onSave: async (traits: string[]) => {
 				await this.options.onSave(traits);
 				this.close();

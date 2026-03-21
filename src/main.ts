@@ -16,6 +16,7 @@ export default class Traitor extends Plugin {
 		await this.loadSettings();
 		this.traitService = new TraitService(this.app, {
 			traitsFolder: this.settings.traitsFolder,
+			tagPrefix: this.settings.traitTagPrefix,
 		});
 		await this.refreshTraitDefinitions();
 
@@ -110,6 +111,7 @@ export default class Traitor extends Plugin {
 
 	async refreshTraitDefinitions(): Promise<void> {
 		this.traitService.setTraitsFolder(this.settings.traitsFolder);
+		this.traitService.setTagPrefix(this.settings.traitTagPrefix);
 		await this.traitService.refreshTraits();
 	}
 
@@ -119,8 +121,37 @@ export default class Traitor extends Plugin {
 			return;
 		}
 
-		const warnings = this.traitService.validateFile(view.file);
+		const warnings = this.traitService
+			.validateFile(view.file)
+			.filter((warning) => this.settings.warnOnMissingTraits || warning.kind !== "missing-definition");
 		this.warningBanner.update(view, warnings);
+	}
+
+	async updateTraitTagPrefix(rawValue: string): Promise<void> {
+		const nextPrefix = rawValue.trim().replace(/^#+/, "").replace(/^\/+|\/+$/g, "") || DEFAULT_SETTINGS.traitTagPrefix;
+		const previousPrefix = this.settings.traitTagPrefix;
+		if (nextPrefix === previousPrefix) {
+			return;
+		}
+
+		const shouldMigrate = window.confirm(
+			`Trait tag prefix changed from "${previousPrefix}" to "${nextPrefix}". Update existing tags across the vault?`,
+		);
+
+		this.settings.traitTagPrefix = nextPrefix;
+		await this.saveSettings();
+		this.traitService.setTagPrefix(nextPrefix);
+		await this.refreshTraitDefinitions();
+		this.refreshWarningsForActiveView();
+
+		if (!shouldMigrate) {
+			return;
+		}
+
+		const touchedCount = await this.traitService.migrateTagPrefix(previousPrefix, nextPrefix);
+		await this.refreshTraitDefinitions();
+		this.refreshWarningsForActiveView();
+		new Notice(`Updated trait tags in ${touchedCount} file${touchedCount === 1 ? "" : "s"}.`);
 	}
 
 	private clearAllWarningBanners(): void {
@@ -165,6 +196,7 @@ export default class Traitor extends Plugin {
 		new TraitPickerModal(this.app, {
 			traitNames,
 			selectedTraits,
+			tagPrefix: this.settings.traitTagPrefix,
 			onSave: async (nextTraits) => {
 				await this.traitService.setTraitsForFile(file, nextTraits);
 				this.refreshWarningsForActiveView();

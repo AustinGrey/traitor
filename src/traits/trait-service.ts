@@ -7,11 +7,9 @@ import {
 	TraitValidationWarning,
 } from "./types";
 
-/** Obsidian nested tags: a note tagged #trait/foo has tag string "trait/foo". */
-const TRAIT_TAG_PREFIX = "trait/";
-
 interface TraitServiceOptions {
 	traitsFolder: string;
+	tagPrefix: string;
 }
 
 function normalizeTraitsFolder(path: string): string {
@@ -108,15 +106,20 @@ function normalizeFrontmatterTags(raw: unknown): string[] {
 		.filter((t) => t.length > 0);
 }
 
-function isTraitTag(tag: string): boolean {
-	return tag.toLowerCase().startsWith(TRAIT_TAG_PREFIX);
+function normalizeTagPrefix(prefix: string): string {
+	const trimmed = prefix.trim().replace(/^#+/, "").replace(/^\/+|\/+$/g, "");
+	return trimmed.length > 0 ? trimmed.toLowerCase() : "trait";
 }
 
-function stripTraitTagPrefix(tag: string): string {
-	if (!isTraitTag(tag)) {
+function isTraitTag(tag: string, tagPrefix: string): boolean {
+	return tag.toLowerCase().startsWith(`${tagPrefix}/`);
+}
+
+function stripTraitTagPrefix(tag: string, tagPrefix: string): string {
+	if (!isTraitTag(tag, tagPrefix)) {
 		return "";
 	}
-	const m = /^trait\//i.exec(tag);
+	const m = new RegExp(`^${tagPrefix}/`, "i").exec(tag);
 	return m ? tag.slice(m[0].length).trim() : "";
 }
 
@@ -133,11 +136,11 @@ function expandTraitPath(traitPath: string): string[] {
 /**
  * Trait ids to validate / show in the picker, derived from #trait/... tags (frontmatter and inline).
  */
-function collectTraitIdsFromTags(allTagStrings: string[]): string[] {
+function collectTraitIdsFromTags(allTagStrings: string[], tagPrefix: string): string[] {
 	const seen = new Set<string>();
 	const ordered: string[] = [];
 	for (const tag of allTagStrings) {
-		const path = stripTraitTagPrefix(tag);
+		const path = stripTraitTagPrefix(tag, tagPrefix);
 		if (path.length === 0) {
 			continue;
 		}
@@ -215,11 +218,13 @@ function formatTypeLabel(type: TraitPropertyType): string {
 export class TraitService {
 	private readonly app: App;
 	private traitsFolder: string;
+	private tagPrefix: string;
 	private traitDefinitions = new Map<string, TraitDefinition>();
 
 	constructor(app: App, options: TraitServiceOptions) {
 		this.app = app;
 		this.traitsFolder = normalizeTraitsFolder(options.traitsFolder);
+		this.tagPrefix = normalizeTagPrefix(options.tagPrefix);
 	}
 
 	setTraitsFolder(path: string): void {
@@ -228,6 +233,14 @@ export class TraitService {
 
 	getTraitsFolder(): string {
 		return this.traitsFolder;
+	}
+
+	setTagPrefix(prefix: string): void {
+		this.tagPrefix = normalizeTagPrefix(prefix);
+	}
+
+	getTagPrefix(): string {
+		return this.tagPrefix;
 	}
 
 	getTraitDefinitions(): TraitDefinition[] {
@@ -264,7 +277,7 @@ export class TraitService {
 	}
 
 	getTraitsForFile(file: TFile): string[] {
-		return collectTraitIdsFromTags(this.mergeTagsFromCache(file));
+		return collectTraitIdsFromTags(this.mergeTagsFromCache(file), this.tagPrefix);
 	}
 
 	async refreshTraits(): Promise<TraitDefinition[]> {
@@ -369,10 +382,10 @@ export class TraitService {
 
 	async setTraitsForFile(file: TFile, traitNames: string[]): Promise<void> {
 		const normalized = [...new Set(traitNames.map((name) => name.trim()).filter((name) => name.length > 0))];
-		const traitTagsToWrite = minimalTraitIdsForTags(normalized).map((id) => `${TRAIT_TAG_PREFIX}${id}`);
+		const traitTagsToWrite = minimalTraitIdsForTags(normalized).map((id) => `${this.tagPrefix}/${id}`);
 		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 			const existing = normalizeFrontmatterTags(frontmatter.tags);
-			const kept = existing.filter((t) => !isTraitTag(t));
+			const kept = existing.filter((t) => !isTraitTag(t, this.tagPrefix));
 			const next = [...kept, ...traitTagsToWrite];
 			if (next.length === 0) {
 				delete frontmatter.tags;
@@ -380,6 +393,50 @@ export class TraitService {
 			}
 			frontmatter.tags = next.length === 1 ? next[0] : next;
 		});
+	}
+
+	async migrateTagPrefix(oldPrefixRaw: string, newPrefixRaw: string): Promise<number> {
+		const oldPrefix = normalizeTagPrefix(oldPrefixRaw);
+		const newPrefix = normalizeTagPrefix(newPrefixRaw);
+		if (oldPrefix === newPrefix) {
+			return 0;
+		}
+
+		let updatedFiles = 0;
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			let changed = false;
+
+			await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+				const existingTags = normalizeFrontmatterTags(frontmatter.tags);
+				if (existingTags.length === 0) {
+					return;
+				}
+
+				const nextTags = existingTags.map((tag) => {
+					if (!isTraitTag(tag, oldPrefix)) {
+						return tag;
+					}
+					changed = true;
+					const suffix = stripTraitTagPrefix(tag, oldPrefix);
+					return `${newPrefix}/${suffix}`;
+				});
+				frontmatter.tags = nextTags.length === 1 ? nextTags[0] : nextTags;
+			});
+
+			const content = await this.app.vault.cachedRead(file);
+			const inlineRegex = new RegExp(`(^|[^\\w/])#${escapeRegex(oldPrefix)}(?=/)`, "gi");
+			const nextContent = content.replace(inlineRegex, `$1#${newPrefix}`);
+			if (nextContent !== content) {
+				await this.app.vault.modify(file, nextContent);
+				changed = true;
+			}
+
+			if (changed) {
+				updatedFiles += 1;
+			}
+		}
+
+		return updatedFiles;
 	}
 
 	async addPropertyToFile(file: TFile, propertyName: string, propertyType: TraitPropertyType): Promise<void> {
@@ -459,4 +516,8 @@ Describe when this trait should be applied.
 			}
 		}
 	}
+}
+
+function escapeRegex(input: string): string {
+	return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

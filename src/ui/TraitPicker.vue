@@ -3,7 +3,7 @@
 		<h2>Traits for this note</h2>
 		<p class="hint">
 			Select traits to apply. Traitor updates the note
-			<code>tags</code> field with nested <code>trait/…</code> entries
+			<code>tags</code> field with nested <code>{{ tagPrefix }}/…</code> entries
 			(parent rules apply when you pick a deeper trait).
 		</p>
 
@@ -50,6 +50,7 @@ import { reactive } from "vue";
 const props = defineProps<{
 	traitNames: string[];
 	initialSelectedTraits: string[];
+	tagPrefix: string;
 }>();
 
 const emit = defineEmits<{

@@ -2,7 +2,7 @@
 
 Define reusable traits and validate your note frontmatter against trait requirements.
 
-Traitor helps you keep metadata consistent across your vault. You assign traits with Obsidian nested tags under `trait/…`, and Traitor warns you when required properties are missing or have the wrong type.
+Traitor helps you keep metadata consistent across your vault. You assign traits with Obsidian nested tags under a configurable prefix (default `trait/…`), and Traitor warns you when required properties are missing or have the wrong type.
 
 ## Why use Traitor?
 
@@ -46,7 +46,7 @@ Traitor helps you keep metadata consistent across your vault. You assign traits 
 2. Name it (for example `person`, or `media/music` for a nested trait file path)
 3. Edit the generated file in your traits folder
 4. Open a note and run **Traitor: Set traits on current note**
-5. Select one or more traits and save (this adds nested tags such as `trait/person`)
+5. Select one or more traits and save (this adds nested tags such as `trait/person` with the default prefix)
 6. Fill in required frontmatter fields until warnings disappear
 
 ## How traits are identified
@@ -54,11 +54,11 @@ Traitor helps you keep metadata consistent across your vault. You assign traits 
 - **Definition files** live in your configured traits folder (default: `_traits`). The trait id is the path of the Markdown file without `.md`, using `/` for nesting.
   - `_traits/person.md` → trait id `person`
   - `_traits/media/music.md` → trait id `media/music`
-- **Notes** use Obsidian nested tags whose first segment is `trait`. Examples:
+- **Notes** use Obsidian nested tags whose first segment is your configured trait prefix (default: `trait`). Examples with the default prefix:
   - Tag `trait/media` applies the trait defined by `media.md`.
   - Tag `trait/media/music` applies both `media` and `media/music` (every prefix segment), so parent and child definition files both apply.
 
-The trait picker writes minimal `trait/…` tags (for example, if you only need `media/music`, it does not also add `trait/media`).
+The trait picker writes minimal tags under the configured prefix (for example, with default prefix `trait`, if you only need `media/music`, it does not also add `trait/media`).
 
 ## Trait definition format
 
@@ -111,6 +111,10 @@ email: hello@example.com
 ## Settings
 
 - **Traits folder**: folder containing your trait definition files (default: `_traits`)
+- **Trait tag prefix**: root tag segment used to identify traits (default: `trait`)
+- **Warn about missing trait definitions**: toggle warnings when a trait tag has no matching definition file
+
+When you change the trait tag prefix, Traitor asks whether you want to migrate existing trait tags across the vault.
 
 ## Compatibility
 
