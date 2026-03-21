@@ -1,16 +1,3 @@
-<script setup lang="ts">
-import type { TraitPropertyType, TraitValidationWarning } from "../traits/types";
-
-defineProps<{
-	warnings: TraitValidationWarning[];
-}>();
-
-const emit = defineEmits<{
-	createTrait: [traitName: string];
-	addProperty: [propertyName: string, propertyType: TraitPropertyType];
-}>();
-</script>
-
 <template>
 	<div class="banner">
 		<strong>Trait warnings</strong>
@@ -45,6 +32,19 @@ const emit = defineEmits<{
 		</ul>
 	</div>
 </template>
+
+<script setup lang="ts">
+import type { TraitPropertyType, TraitValidationWarning } from "../traits/types";
+
+defineProps<{
+	warnings: TraitValidationWarning[];
+}>();
+
+const emit = defineEmits<{
+	createTrait: [traitName: string];
+	addProperty: [propertyName: string, propertyType: TraitPropertyType];
+}>();
+</script>
 
 <style scoped>
 .banner {

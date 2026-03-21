@@ -1,27 +1,3 @@
-<script setup lang="ts">
-import { reactive } from "vue";
-
-const props = defineProps<{
-	traitNames: string[];
-	initialSelectedTraits: string[];
-}>();
-
-const emit = defineEmits<{
-	save: [selectedTraits: string[]];
-	createTrait: [];
-}>();
-
-const selected = reactive(new Set(props.initialSelectedTraits));
-
-function toggle(name: string) {
-	if (selected.has(name)) {
-		selected.delete(name);
-	} else {
-		selected.add(name);
-	}
-}
-</script>
-
 <template>
 	<div>
 		<h2>Traits for this note</h2>
@@ -66,6 +42,30 @@ function toggle(name: string) {
 		</div>
 	</div>
 </template>
+
+<script setup lang="ts">
+import { reactive } from "vue";
+
+const props = defineProps<{
+	traitNames: string[];
+	initialSelectedTraits: string[];
+}>();
+
+const emit = defineEmits<{
+	save: [selectedTraits: string[]];
+	createTrait: [];
+}>();
+
+const selected = reactive(new Set(props.initialSelectedTraits));
+
+function toggle(name: string) {
+	if (selected.has(name)) {
+		selected.delete(name);
+	} else {
+		selected.add(name);
+	}
+}
+</script>
 
 <style scoped>
 .hint,
