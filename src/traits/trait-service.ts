@@ -5,7 +5,6 @@ import {
 	TraitPropertyRule,
 	TraitPropertyType,
 	TraitValidationWarning,
-	TraitWarningKind,
 } from "./types";
 
 interface TraitServiceOptions {

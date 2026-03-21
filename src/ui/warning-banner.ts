@@ -1,7 +1,9 @@
+import { createApp, h, shallowRef, type App as VueApp } from "vue";
 import { MarkdownView } from "obsidian";
-import { TraitPropertyType, TraitValidationWarning } from "../traits/types";
+import type { TraitPropertyType, TraitValidationWarning } from "../traits/types";
+import WarningBanner from "./WarningBanner.vue";
 
-const BANNER_CLASS = "traitor-warning-banner";
+const MOUNT_CLASS = "traitor-warning-banner-mount";
 
 export interface WarningBannerCallbacks {
 	onCreateTrait?: (traitName: string) => void;
@@ -10,64 +12,65 @@ export interface WarningBannerCallbacks {
 
 export class WarningBannerController {
 	private callbacks: WarningBannerCallbacks = {};
+	private vueApp: VueApp | null = null;
+	private warnings = shallowRef<TraitValidationWarning[]>([]);
+	private currentView: MarkdownView | null = null;
 
 	setCallbacks(callbacks: WarningBannerCallbacks): void {
 		this.callbacks = callbacks;
 	}
 
 	update(view: MarkdownView, warnings: TraitValidationWarning[]): void {
-		const existingBanner = view.contentEl.querySelector(`.${BANNER_CLASS}`);
 		if (warnings.length === 0) {
-			existingBanner?.remove();
+			this.unmountCurrent();
 			return;
 		}
 
-		const banner = existingBanner ?? this.createBanner(view);
-		const listEl = banner.querySelector("ul");
-		if (!listEl) {
-			return;
+		if (this.currentView !== view) {
+			this.unmountCurrent();
 		}
 
-		listEl.empty();
-		for (const warning of warnings) {
-			const li = listEl.createEl("li");
-			li.createSpan({ text: `[${warning.traitName}] ${warning.message}` });
+		this.warnings.value = warnings;
 
-			if (warning.kind === "missing-definition" && this.callbacks.onCreateTrait) {
-				const btn = li.createEl("button", {
-					text: "Create trait",
-					cls: "traitor-warning-banner__action-btn",
-				});
-				const traitName = warning.traitName;
-				btn.addEventListener("click", (e) => {
-					e.preventDefault();
-					this.callbacks.onCreateTrait?.(traitName);
-				});
-			}
-
-			if (warning.kind === "missing-property" && warning.propertyName && warning.propertyType && this.callbacks.onAddProperty) {
-				const btn = li.createEl("button", {
-					text: "Add property",
-					cls: "traitor-warning-banner__action-btn",
-				});
-				const { propertyName, propertyType } = warning;
-				btn.addEventListener("click", (e) => {
-					e.preventDefault();
-					this.callbacks.onAddProperty?.(propertyName, propertyType);
-				});
-			}
+		if (!this.vueApp) {
+			this.mount(view);
 		}
 	}
 
 	clear(view: MarkdownView): void {
-		view.contentEl.querySelector(`.${BANNER_CLASS}`)?.remove();
+		if (this.currentView === view) {
+			this.unmountCurrent();
+		}
+		view.contentEl.querySelector(`.${MOUNT_CLASS}`)?.remove();
 	}
 
-	private createBanner(view: MarkdownView): HTMLElement {
-		const banner = createDiv({ cls: BANNER_CLASS });
-		banner.createEl("strong", { text: "Trait warnings" });
-		banner.createEl("ul");
-		view.contentEl.prepend(banner);
-		return banner;
+	private mount(view: MarkdownView): void {
+		const mountEl = createDiv({ cls: MOUNT_CLASS });
+		view.contentEl.prepend(mountEl);
+		this.currentView = view;
+
+		const { warnings, callbacks } = this;
+
+		this.vueApp = createApp({
+			setup() {
+				return () =>
+					h(WarningBanner, {
+						warnings: warnings.value,
+						onCreateTrait: (name: string) => callbacks.onCreateTrait?.(name),
+						onAddProperty: (name: string, type: TraitPropertyType) =>
+							callbacks.onAddProperty?.(name, type),
+					});
+			},
+		});
+		this.vueApp.mount(mountEl);
+	}
+
+	private unmountCurrent(): void {
+		this.vueApp?.unmount();
+		this.vueApp = null;
+		if (this.currentView) {
+			this.currentView.contentEl.querySelector(`.${MOUNT_CLASS}`)?.remove();
+			this.currentView = null;
+		}
 	}
 }

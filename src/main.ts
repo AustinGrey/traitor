@@ -1,7 +1,8 @@
-import { MarkdownView, Modal, Notice, Plugin, TFile, TextComponent } from "obsidian";
+import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
 import { DEFAULT_SETTINGS, TraitorSettings, TraitorSettingsTab } from "./settings";
 import { TraitService } from "./traits/trait-service";
 import { TraitPropertyType } from "./traits/types";
+import { CreateTraitModal } from "./ui/create-trait-modal";
 import { TraitPickerModal } from "./ui/trait-picker-modal";
 import { WarningBannerController } from "./ui/warning-banner";
 import "./plugin.css";
@@ -37,7 +38,7 @@ export default class Traitor extends Plugin {
 			id: "create-trait-definition-file",
 			name: "Create trait definition file",
 			callback: () => {
-				new CreateTraitModal(this, async (traitName) => {
+				new CreateTraitModal(this.app, this.settings.traitsFolder, async (traitName) => {
 					const file = await this.traitService.createTraitDefinitionFile(traitName);
 					await this.refreshTraitDefinitions();
 					new Notice(`Trait definition ready: ${file.path}`);
@@ -170,7 +171,7 @@ export default class Traitor extends Plugin {
 				new Notice("Traits updated.");
 			},
 			onCreateTrait: async () => {
-				new CreateTraitModal(this, async (name) => {
+				new CreateTraitModal(this.app, this.settings.traitsFolder, async (name) => {
 					const created = await this.traitService.createTraitDefinitionFile(name);
 					await this.refreshTraitDefinitions();
 					new Notice(`Trait definition ready: ${created.path}`);
@@ -178,42 +179,5 @@ export default class Traitor extends Plugin {
 				}).open();
 			},
 		}).open();
-	}
-}
-
-class CreateTraitModal extends Modal {
-	private readonly plugin: Traitor;
-	private readonly onSubmit: (traitName: string) => Promise<void>;
-
-	constructor(plugin: Traitor, onSubmit: (traitName: string) => Promise<void>) {
-		super(plugin.app);
-		this.plugin = plugin;
-		this.onSubmit = onSubmit;
-	}
-
-	onOpen(): void {
-		const { contentEl } = this;
-		contentEl.empty();
-
-		contentEl.createEl("h2", { text: "Create trait definition file" });
-		contentEl.createEl("p", {
-			text: `Trait files are stored in "${this.plugin.settings.traitsFolder}".`,
-		});
-
-		let traitName = "";
-		new TextComponent(contentEl)
-			.setPlaceholder("person")
-			.onChange((value) => {
-				traitName = value;
-			})
-			.inputEl.focus();
-
-		contentEl.createEl("button", {
-			text: "Create",
-			cls: "mod-cta",
-		}).addEventListener("click", async () => {
-			await this.onSubmit(traitName);
-			this.close();
-		});
 	}
 }
