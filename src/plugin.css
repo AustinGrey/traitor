@@ -24,7 +24,7 @@
 	flex-wrap: wrap;
 }
 
-.traitor-warning-banner__create-btn {
+.traitor-warning-banner__action-btn {
 	font-size: var(--font-smallest);
 	padding: 1px 8px;
 	border-radius: 4px;

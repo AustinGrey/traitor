@@ -1,6 +1,7 @@
 import { MarkdownView, Modal, Notice, Plugin, TFile, TextComponent } from "obsidian";
 import { DEFAULT_SETTINGS, TraitorSettings, TraitorSettingsTab } from "./settings";
 import { TraitService } from "./traits/trait-service";
+import { TraitPropertyType } from "./traits/types";
 import { TraitPickerModal } from "./ui/trait-picker-modal";
 import { WarningBannerController } from "./ui/warning-banner";
 import "./plugin.css";
@@ -19,6 +20,7 @@ export default class Traitor extends Plugin {
 
 		this.warningBanner.setCallbacks({
 			onCreateTrait: (traitName) => this.createTraitAndRefresh(traitName),
+			onAddProperty: (propertyName, propertyType) => this.addPropertyToActiveFile(propertyName, propertyType),
 		});
 
 		this.addRibbonIcon("target", "Set traits for current note", () => {
@@ -127,6 +129,16 @@ export default class Traitor extends Plugin {
 				this.warningBanner.clear(view);
 			}
 		}
+	}
+
+	private async addPropertyToActiveFile(propertyName: string, propertyType: TraitPropertyType): Promise<void> {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view?.file) {
+			return;
+		}
+		await this.traitService.addPropertyToFile(view.file, propertyName, propertyType);
+		this.refreshWarningsForActiveView();
+		new Notice(`Added property "${propertyName}".`);
 	}
 
 	private async createTraitAndRefresh(traitName: string): Promise<void> {

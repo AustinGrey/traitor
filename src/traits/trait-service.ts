@@ -235,6 +235,8 @@ export class TraitService {
 						traitName,
 						kind: "missing-property",
 						message: `Missing required property "${property.name}".`,
+						propertyName: property.name,
+						propertyType: property.type,
 					});
 					continue;
 				}
@@ -283,6 +285,32 @@ export class TraitService {
 			}
 			frontmatter.traits = normalized;
 		});
+	}
+
+	async addPropertyToFile(file: TFile, propertyName: string, propertyType: TraitPropertyType): Promise<void> {
+		const defaultValue = this.defaultValueForType(propertyType);
+		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+			if (frontmatter[propertyName] === undefined || frontmatter[propertyName] === null) {
+				frontmatter[propertyName] = defaultValue;
+			}
+		});
+	}
+
+	private defaultValueForType(type: TraitPropertyType): unknown {
+		switch (type) {
+			case "string":
+				return "";
+			case "number":
+				return 0;
+			case "boolean":
+				return false;
+			case "array":
+				return [];
+			case "date":
+				return new Date().toISOString().slice(0, 10);
+			default:
+				return "";
+		}
 	}
 
 	async ensureTraitsFolderExists(): Promise<void> {

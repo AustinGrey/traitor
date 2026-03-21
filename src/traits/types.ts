@@ -33,4 +33,6 @@ export interface TraitValidationWarning {
 	traitName: string;
 	message: string;
 	kind: TraitWarningKind;
+	propertyName?: string;
+	propertyType?: TraitPropertyType;
 }

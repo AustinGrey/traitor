@@ -1,10 +1,11 @@
 import { MarkdownView } from "obsidian";
-import { TraitValidationWarning } from "../traits/types";
+import { TraitPropertyType, TraitValidationWarning } from "../traits/types";
 
 const BANNER_CLASS = "traitor-warning-banner";
 
 export interface WarningBannerCallbacks {
 	onCreateTrait?: (traitName: string) => void;
+	onAddProperty?: (propertyName: string, propertyType: TraitPropertyType) => void;
 }
 
 export class WarningBannerController {
@@ -35,12 +36,24 @@ export class WarningBannerController {
 			if (warning.kind === "missing-definition" && this.callbacks.onCreateTrait) {
 				const btn = li.createEl("button", {
 					text: "Create trait",
-					cls: "traitor-warning-banner__create-btn",
+					cls: "traitor-warning-banner__action-btn",
 				});
 				const traitName = warning.traitName;
 				btn.addEventListener("click", (e) => {
 					e.preventDefault();
 					this.callbacks.onCreateTrait?.(traitName);
+				});
+			}
+
+			if (warning.kind === "missing-property" && warning.propertyName && warning.propertyType && this.callbacks.onAddProperty) {
+				const btn = li.createEl("button", {
+					text: "Add property",
+					cls: "traitor-warning-banner__action-btn",
+				});
+				const { propertyName, propertyType } = warning;
+				btn.addEventListener("click", (e) => {
+					e.preventDefault();
+					this.callbacks.onAddProperty?.(propertyName, propertyType);
 				});
 			}
 		}
