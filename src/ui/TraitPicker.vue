@@ -2,8 +2,9 @@
 	<div>
 		<h2>Traits for this note</h2>
 		<p class="hint">
-			Select one or more traits to apply. This plugin manages the
-			frontmatter traits property for you.
+			Select traits to apply. Traitor updates the note
+			<code>tags</code> field with nested <code>trait/…</code> entries
+			(parent rules apply when you pick a deeper trait).
 		</p>
 
 		<p v-if="traitNames.length === 0" class="empty">

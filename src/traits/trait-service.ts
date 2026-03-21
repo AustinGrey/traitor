@@ -7,6 +7,9 @@ import {
 	TraitValidationWarning,
 } from "./types";
 
+/** Obsidian nested tags: a note tagged #trait/foo has tag string "trait/foo". */
+const TRAIT_TAG_PREFIX = "trait/";
+
 interface TraitServiceOptions {
 	traitsFolder: string;
 }
@@ -88,25 +91,128 @@ function parseProperties(rawProperties: unknown): TraitPropertyRule[] {
 	return rules;
 }
 
-function getFrontmatterTraits(frontmatter: Record<string, unknown> | null | undefined): string[] {
+function normalizeFrontmatterTags(raw: unknown): string[] {
+	if (raw === undefined || raw === null) {
+		return [];
+	}
+	if (typeof raw === "string") {
+		const trimmed = raw.trim();
+		return trimmed.length > 0 ? [trimmed] : [];
+	}
+	if (!Array.isArray(raw)) {
+		return [];
+	}
+	return raw
+		.filter((value): value is string => typeof value === "string")
+		.map((t) => t.trim())
+		.filter((t) => t.length > 0);
+}
+
+function isTraitTag(tag: string): boolean {
+	return tag.toLowerCase().startsWith(TRAIT_TAG_PREFIX);
+}
+
+function stripTraitTagPrefix(tag: string): string {
+	if (!isTraitTag(tag)) {
+		return "";
+	}
+	const m = /^trait\//i.exec(tag);
+	return m ? tag.slice(m[0].length).trim() : "";
+}
+
+/** "media/music" -> ["media", "media/music"] */
+function expandTraitPath(traitPath: string): string[] {
+	const parts = traitPath.split("/").map((p) => p.trim()).filter((p) => p.length > 0);
+	const out: string[] = [];
+	for (let i = 0; i < parts.length; i++) {
+		out.push(parts.slice(0, i + 1).join("/"));
+	}
+	return out;
+}
+
+/**
+ * Trait ids to validate / show in the picker, derived from #trait/... tags (frontmatter and inline).
+ */
+function collectTraitIdsFromTags(allTagStrings: string[]): string[] {
+	const seen = new Set<string>();
+	const ordered: string[] = [];
+	for (const tag of allTagStrings) {
+		const path = stripTraitTagPrefix(tag);
+		if (path.length === 0) {
+			continue;
+		}
+		for (const id of expandTraitPath(path)) {
+			if (!seen.has(id)) {
+				seen.add(id);
+				ordered.push(id);
+			}
+		}
+	}
+	return ordered;
+}
+
+/**
+ * When saving, omit trait/x if trait/x/y is also selected so one nested tag implies parents.
+ */
+function minimalTraitIdsForTags(selectedIds: string[]): string[] {
+	const set = new Set(selectedIds.map((id) => id.trim()).filter((id) => id.length > 0));
+	const minimal: string[] = [];
+	for (const id of set) {
+		let hasDescendantInSet = false;
+		const prefix = `${id}/`;
+		for (const other of set) {
+			if (other !== id && other.startsWith(prefix)) {
+				hasDescendantInSet = true;
+				break;
+			}
+		}
+		if (!hasDescendantInSet) {
+			minimal.push(id);
+		}
+	}
+	return minimal.sort((a, b) => a.localeCompare(b));
+}
+
+/** @deprecated Notes should use nested tags (e.g. trait/person); kept for reading old vaults. */
+function getLegacyTraitsFromFrontmatter(frontmatter: Record<string, unknown> | null | undefined): string[] {
 	if (!frontmatter) {
 		return [];
 	}
-
 	const rawTraits = frontmatter.traits;
 	if (typeof rawTraits === "string") {
 		const trimmed = rawTraits.trim();
 		return trimmed.length > 0 ? [trimmed] : [];
 	}
-
 	if (!Array.isArray(rawTraits)) {
 		return [];
 	}
-
 	return rawTraits
 		.filter((value): value is string => typeof value === "string")
 		.map((traitName) => traitName.trim())
 		.filter((traitName) => traitName.length > 0);
+}
+
+function expandLegacyTraitIds(legacyIds: string[]): string[] {
+	const seen = new Set<string>();
+	const ordered: string[] = [];
+	for (const id of legacyIds) {
+		for (const part of expandTraitPath(id)) {
+			if (!seen.has(part)) {
+				seen.add(part);
+				ordered.push(part);
+			}
+		}
+	}
+	return ordered;
+}
+
+function traitIdFromTraitsFilePath(traitsFolder: string, filePath: string): string | null {
+	const prefix = `${normalizePath(traitsFolder)}/`;
+	if (!filePath.startsWith(prefix) || !filePath.endsWith(".md")) {
+		return null;
+	}
+	const relative = filePath.slice(prefix.length, -3);
+	return relative.length > 0 ? normalizePath(relative) : null;
 }
 
 function matchesExpectedType(value: unknown, expectedType: TraitPropertyType): boolean {
@@ -165,32 +271,58 @@ export class TraitService {
 		return this.getTraitDefinitions().map((trait) => trait.name);
 	}
 
+	private mergeTagsFromCache(file: TFile): string[] {
+		const cache = this.app.metadataCache.getFileCache(file);
+		if (!cache) {
+			return [];
+		}
+		const seen = new Set<string>();
+		const ordered: string[] = [];
+		for (const t of normalizeFrontmatterTags(cache.frontmatter?.tags)) {
+			const key = t.toLowerCase();
+			if (!seen.has(key)) {
+				seen.add(key);
+				ordered.push(t);
+			}
+		}
+		for (const { tag } of cache.tags ?? []) {
+			const normalized = tag.startsWith("#") ? tag.slice(1) : tag;
+			const key = normalized.toLowerCase();
+			if (!seen.has(key)) {
+				seen.add(key);
+				ordered.push(normalized);
+			}
+		}
+		return ordered;
+	}
+
 	getTraitsForFile(file: TFile): string[] {
-		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-		return getFrontmatterTraits(frontmatter);
+		const fromTags = collectTraitIdsFromTags(this.mergeTagsFromCache(file));
+		if (fromTags.length > 0) {
+			return fromTags;
+		}
+		const cache = this.app.metadataCache.getFileCache(file);
+		return expandLegacyTraitIds(getLegacyTraitsFromFrontmatter(cache?.frontmatter));
 	}
 
 	async refreshTraits(): Promise<TraitDefinition[]> {
+		const folderPrefix = `${normalizePath(this.traitsFolder)}/`;
 		const files = this.app.vault
 			.getMarkdownFiles()
-			.filter((file) => file.path.startsWith(`${this.traitsFolder}/`));
+			.filter((file) => file.path.startsWith(folderPrefix));
 
 		const nextMap = new Map<string, TraitDefinition>();
 		for (const file of files) {
-			const cache = this.app.metadataCache.getFileCache(file);
-			const frontmatter = cache?.frontmatter;
-			if (!frontmatter || !isRecord(frontmatter)) {
+			const traitId = traitIdFromTraitsFilePath(this.traitsFolder, file.path);
+			if (!traitId) {
 				continue;
 			}
 
-			const traitNameRaw = typeof frontmatter.trait === "string" ? frontmatter.trait : file.basename;
-			const traitName = traitNameRaw.trim();
-			if (traitName.length === 0) {
-				continue;
-			}
+			const cache = this.app.metadataCache.getFileCache(file);
+			const frontmatter = cache?.frontmatter && isRecord(cache.frontmatter) ? cache.frontmatter : {};
 
 			const definition: TraitDefinition = {
-				name: traitName,
+				name: traitId,
 				filePath: file.path,
 				description: asString(frontmatter.description),
 				properties: parseProperties(frontmatter.properties),
@@ -205,15 +337,13 @@ export class TraitService {
 
 	validateFile(file: TFile): TraitValidationWarning[] {
 		const warnings: TraitValidationWarning[] = [];
-		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-		if (!frontmatter || !isRecord(frontmatter)) {
-			return warnings;
-		}
-
-		const traitNames = getFrontmatterTraits(frontmatter);
+		const traitNames = this.getTraitsForFile(file);
 		if (traitNames.length === 0) {
 			return warnings;
 		}
+
+		const rawFm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const frontmatter = rawFm && isRecord(rawFm) ? rawFm : {};
 
 		for (const traitName of traitNames) {
 			const trait = this.traitDefinitions.get(traitName);
@@ -277,12 +407,17 @@ export class TraitService {
 
 	async setTraitsForFile(file: TFile, traitNames: string[]): Promise<void> {
 		const normalized = [...new Set(traitNames.map((name) => name.trim()).filter((name) => name.length > 0))];
+		const traitTagsToWrite = minimalTraitIdsForTags(normalized).map((id) => `${TRAIT_TAG_PREFIX}${id}`);
 		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-			if (normalized.length === 0) {
-				delete frontmatter.traits;
+			delete frontmatter.traits;
+			const existing = normalizeFrontmatterTags(frontmatter.tags);
+			const kept = existing.filter((t) => !isTraitTag(t));
+			const next = [...kept, ...traitTagsToWrite];
+			if (next.length === 0) {
+				delete frontmatter.tags;
 				return;
 			}
-			frontmatter.traits = normalized;
+			frontmatter.tags = next.length === 1 ? next[0] : next;
 		});
 	}
 
@@ -325,13 +460,14 @@ export class TraitService {
 		const filePath = normalizePath(`${this.traitsFolder}/${safeName}.md`);
 
 		await this.ensureTraitsFolderExists();
+		await this.ensureParentFoldersForFile(filePath);
 		const existing = this.app.vault.getAbstractFileByPath(filePath);
 		if (existing instanceof TFile) {
 			return existing;
 		}
 
+		const displayTitle = safeName.includes("/") ? safeName.split("/").pop()! : safeName;
 		const template = `---
-trait: ${safeName}
 description: Describe what this trait means.
 properties:
   title:
@@ -339,10 +475,27 @@ properties:
     required: true
 ---
 
-# ${safeName}
+# ${displayTitle}
 
 Describe when this trait should be applied.
 `;
 		return this.app.vault.create(filePath, template);
+	}
+
+	private async ensureParentFoldersForFile(filePath: string): Promise<void> {
+		const lastSlash = filePath.lastIndexOf("/");
+		if (lastSlash <= 0) {
+			return;
+		}
+		const folderPath = filePath.slice(0, lastSlash);
+		const parts = folderPath.split("/").filter((p) => p.length > 0);
+		let acc = "";
+		for (const part of parts) {
+			acc = acc.length > 0 ? `${acc}/${part}` : part;
+			const found = this.app.vault.getAbstractFileByPath(acc);
+			if (!found) {
+				await this.app.vault.createFolder(acc);
+			}
+		}
 	}
 }

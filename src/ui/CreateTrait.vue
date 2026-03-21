@@ -6,7 +6,7 @@
 			ref="inputEl"
 			v-model="traitName"
 			type="text"
-			placeholder="person"
+			placeholder="person or media/music"
 			@keyup.enter="emit('submit', traitName)"
 		/>
 		<button class="mod-cta" @click="emit('submit', traitName)">

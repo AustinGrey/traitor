@@ -37,7 +37,7 @@ export class TraitorSettingsTab extends PluginSettingTab {
 			);
 
 		containerEl.createEl("p", {
-			text: "Trait file format: use frontmatter with trait, description, and a properties map. Example: properties.status.type = string and properties.status.required = true.",
+			text: "Trait files: path under the traits folder is the trait id (person.md is person; media/music.md is media/music). Frontmatter: description and a properties map (for example properties.status.type = string and properties.status.required = true). On notes, use nested tags trait/ followed by the id; trait/media/music applies both media and media/music.",
 		});
 	}
 }
