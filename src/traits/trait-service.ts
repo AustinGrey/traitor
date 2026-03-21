@@ -5,6 +5,7 @@ import {
 	TraitPropertyRule,
 	TraitPropertyType,
 	TraitValidationWarning,
+	TraitWarningKind,
 } from "./types";
 
 interface TraitServiceOptions {
@@ -220,6 +221,7 @@ export class TraitService {
 			if (!trait) {
 				warnings.push({
 					traitName,
+					kind: "missing-definition",
 					message: `Trait "${traitName}" is referenced but no trait definition file was found in "${this.traitsFolder}".`,
 				});
 				continue;
@@ -231,6 +233,7 @@ export class TraitService {
 				if (property.required && !hasValue) {
 					warnings.push({
 						traitName,
+						kind: "missing-property",
 						message: `Missing required property "${property.name}".`,
 					});
 					continue;
@@ -243,6 +246,7 @@ export class TraitService {
 				if (!matchesExpectedType(value, property.type)) {
 					warnings.push({
 						traitName,
+						kind: "type-mismatch",
 						message: `Property "${property.name}" should be ${formatTypeLabel(property.type)}.`,
 					});
 					continue;
@@ -259,6 +263,7 @@ export class TraitService {
 					if (regex && !regex.test(value)) {
 						warnings.push({
 							traitName,
+							kind: "pattern-mismatch",
 							message: `Property "${property.name}" does not match pattern /${property.pattern}/.`,
 						});
 					}

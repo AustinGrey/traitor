@@ -23,7 +23,14 @@ export interface TraitDefinition {
 	properties: TraitPropertyRule[];
 }
 
+export type TraitWarningKind =
+	| "missing-definition"
+	| "missing-property"
+	| "type-mismatch"
+	| "pattern-mismatch";
+
 export interface TraitValidationWarning {
 	traitName: string;
 	message: string;
+	kind: TraitWarningKind;
 }

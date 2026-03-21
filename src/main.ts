@@ -17,6 +17,10 @@ export default class Traitor extends Plugin {
 		});
 		await this.refreshTraitDefinitions();
 
+		this.warningBanner.setCallbacks({
+			onCreateTrait: (traitName) => this.createTraitAndRefresh(traitName),
+		});
+
 		this.addRibbonIcon("target", "Set traits for current note", () => {
 			void this.openTraitPickerForActiveFile();
 		});
@@ -123,6 +127,14 @@ export default class Traitor extends Plugin {
 				this.warningBanner.clear(view);
 			}
 		}
+	}
+
+	private async createTraitAndRefresh(traitName: string): Promise<void> {
+		const file = await this.traitService.createTraitDefinitionFile(traitName);
+		await this.refreshTraitDefinitions();
+		this.refreshWarningsForActiveView();
+		new Notice(`Trait definition ready: ${file.path}`);
+		await this.app.workspace.getLeaf(true).openFile(file);
 	}
 
 	private async openTraitPickerForActiveFile(): Promise<void> {
