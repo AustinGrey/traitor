@@ -257,7 +257,7 @@ export class TraitService {
 					let regex: RegExp | null = null;
 					try {
 						regex = new RegExp(property.pattern);
-					} catch (_error) {
+					} catch {
 						regex = null;
 					}
 
@@ -277,7 +277,7 @@ export class TraitService {
 
 	async setTraitsForFile(file: TFile, traitNames: string[]): Promise<void> {
 		const normalized = [...new Set(traitNames.map((name) => name.trim()).filter((name) => name.length > 0))];
-		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 			if (normalized.length === 0) {
 				delete frontmatter.traits;
 				return;
@@ -288,7 +288,7 @@ export class TraitService {
 
 	async addPropertyToFile(file: TFile, propertyName: string, propertyType: TraitPropertyType): Promise<void> {
 		const defaultValue = this.defaultValueForType(propertyType);
-		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 			if (frontmatter[propertyName] === undefined || frontmatter[propertyName] === null) {
 				frontmatter[propertyName] = defaultValue;
 			}
