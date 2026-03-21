@@ -2,14 +2,14 @@
 
 Define reusable traits and validate your note frontmatter against trait requirements.
 
-Traitor helps you keep metadata consistent across your vault. You can assign one or more traits to a note, and Traitor warns you when required properties are missing or have the wrong type.
+Traitor helps you keep metadata consistent across your vault. You assign traits with Obsidian nested tags under `trait/…`, and Traitor warns you when required properties are missing or have the wrong type.
 
 ## Why use Traitor?
 
 - Reuse metadata rules across many notes (people, projects, books, etc.)
 - Catch mistakes early with in-editor warning banners
 - Keep your frontmatter clean and predictable
-- Apply traits through a picker instead of manually editing `traits:`
+- Apply traits through a picker (updates the `tags` field) or by adding nested tags yourself
 
 ## What it does
 
@@ -17,7 +17,7 @@ Traitor helps you keep metadata consistent across your vault. You can assign one
 - Lets you create trait definition files from inside Obsidian
 - Validates notes against trait-defined property rules
 - Shows clear warnings when:
-  - a trait is referenced but has no definition file
+  - a trait tag is present but has no definition file
   - a required property is missing
   - a property value has the wrong type
   - a string value does not match a required regex pattern
@@ -26,36 +26,46 @@ Traitor helps you keep metadata consistent across your vault. You can assign one
 
 ### From Community Plugins (when listed)
 
-1. Open **Settings -> Community plugins**
+1. Open **Settings → Community plugins**
 2. Select **Browse**
 3. Search for **Traitor**
 4. Install and enable
 
 ### Manual install
 
-1. Download `manifest.json` and `main.js` from the latest release
+1. Download `manifest.json`, `main.js`, and `styles.css` (if present) from the latest release
 2. Create this folder in your vault:
    `.obsidian/plugins/traitor/`
-3. Copy both files into that folder
+3. Copy the files into that folder
 4. Reload Obsidian
-5. Enable **Traitor** in **Settings -> Community plugins**
+5. Enable **Traitor** in **Settings → Community plugins**
 
 ## Quick start
 
 1. Run the command **Traitor: Create trait definition file**
-2. Name it (for example `person`)
+2. Name it (for example `person`, or `media/music` for a nested trait file path)
 3. Edit the generated file in your traits folder
 4. Open a note and run **Traitor: Set traits on current note**
-5. Select one or more traits and save
+5. Select one or more traits and save (this adds nested tags such as `trait/person`)
 6. Fill in required frontmatter fields until warnings disappear
+
+## How traits are identified
+
+- **Definition files** live in your configured traits folder (default: `_traits`). The trait id is the path of the Markdown file without `.md`, using `/` for nesting.
+  - `_traits/person.md` → trait id `person`
+  - `_traits/media/music.md` → trait id `media/music`
+- **Notes** use Obsidian nested tags whose first segment is `trait`. Examples:
+  - Tag `trait/media` applies the trait defined by `media.md`.
+  - Tag `trait/media/music` applies both `media` and `media/music` (every prefix segment), so parent and child definition files both apply.
+
+The trait picker writes minimal `trait/…` tags (for example, if you only need `media/music`, it does not also add `trait/media`).
 
 ## Trait definition format
 
-Trait definition files are markdown notes in your configured traits folder (default: `_traits`), with frontmatter like this:
+Trait definition files are Markdown notes in your traits folder. The filename (and folder path) defines the trait; frontmatter holds `description` and `properties` only:
 
 ```yaml
 ---
-trait: person
 description: Notes about people
 properties:
   status:
@@ -79,12 +89,14 @@ Supported property types:
 - `array`
 - `date` (valid date string)
 
-## Note frontmatter example
+## Note example (tags + properties)
+
+Use the `tags` property (and/or inline `#tags`) for traits. Other frontmatter holds the data Traitor validates:
 
 ```yaml
 ---
-traits:
-  - person
+tags:
+  - trait/person
 status: active
 birthday: 1993-07-16
 email: hello@example.com

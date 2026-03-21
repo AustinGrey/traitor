@@ -173,39 +173,6 @@ function minimalTraitIdsForTags(selectedIds: string[]): string[] {
 	return minimal.sort((a, b) => a.localeCompare(b));
 }
 
-/** @deprecated Notes should use nested tags (e.g. trait/person); kept for reading old vaults. */
-function getLegacyTraitsFromFrontmatter(frontmatter: Record<string, unknown> | null | undefined): string[] {
-	if (!frontmatter) {
-		return [];
-	}
-	const rawTraits = frontmatter.traits;
-	if (typeof rawTraits === "string") {
-		const trimmed = rawTraits.trim();
-		return trimmed.length > 0 ? [trimmed] : [];
-	}
-	if (!Array.isArray(rawTraits)) {
-		return [];
-	}
-	return rawTraits
-		.filter((value): value is string => typeof value === "string")
-		.map((traitName) => traitName.trim())
-		.filter((traitName) => traitName.length > 0);
-}
-
-function expandLegacyTraitIds(legacyIds: string[]): string[] {
-	const seen = new Set<string>();
-	const ordered: string[] = [];
-	for (const id of legacyIds) {
-		for (const part of expandTraitPath(id)) {
-			if (!seen.has(part)) {
-				seen.add(part);
-				ordered.push(part);
-			}
-		}
-	}
-	return ordered;
-}
-
 function traitIdFromTraitsFilePath(traitsFolder: string, filePath: string): string | null {
 	const prefix = `${normalizePath(traitsFolder)}/`;
 	if (!filePath.startsWith(prefix) || !filePath.endsWith(".md")) {
@@ -297,12 +264,7 @@ export class TraitService {
 	}
 
 	getTraitsForFile(file: TFile): string[] {
-		const fromTags = collectTraitIdsFromTags(this.mergeTagsFromCache(file));
-		if (fromTags.length > 0) {
-			return fromTags;
-		}
-		const cache = this.app.metadataCache.getFileCache(file);
-		return expandLegacyTraitIds(getLegacyTraitsFromFrontmatter(cache?.frontmatter));
+		return collectTraitIdsFromTags(this.mergeTagsFromCache(file));
 	}
 
 	async refreshTraits(): Promise<TraitDefinition[]> {
@@ -351,7 +313,7 @@ export class TraitService {
 				warnings.push({
 					traitName,
 					kind: "missing-definition",
-					message: `Trait "${traitName}" is referenced but no trait definition file was found in "${this.traitsFolder}".`,
+					message: `Trait "${traitName}" is used on this note but no trait definition file was found in "${this.traitsFolder}".`,
 				});
 				continue;
 			}
@@ -409,7 +371,6 @@ export class TraitService {
 		const normalized = [...new Set(traitNames.map((name) => name.trim()).filter((name) => name.length > 0))];
 		const traitTagsToWrite = minimalTraitIdsForTags(normalized).map((id) => `${TRAIT_TAG_PREFIX}${id}`);
 		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-			delete frontmatter.traits;
 			const existing = normalizeFrontmatterTags(frontmatter.tags);
 			const kept = existing.filter((t) => !isTraitTag(t));
 			const next = [...kept, ...traitTagsToWrite];
