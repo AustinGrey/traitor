@@ -176,6 +176,33 @@ function minimalTraitIdsForTags(selectedIds: string[]): string[] {
 	return minimal.sort((a, b) => a.localeCompare(b));
 }
 
+/** True if the value is safe to drop when a trait is removed (no meaningful user content). */
+function isEmptyForTraitRemoval(value: unknown): boolean {
+	if (value === undefined || value === null) {
+		return true;
+	}
+	if (typeof value === "string") {
+		return value.trim().length === 0;
+	}
+	if (Array.isArray(value)) {
+		return value.length === 0;
+	}
+	return false;
+}
+
+function sameTraitIdSet(a: string[], b: string[]): boolean {
+	if (a.length !== b.length) {
+		return false;
+	}
+	const setA = new Set(a);
+	for (const x of b) {
+		if (!setA.has(x)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 function traitIdFromTraitsFilePath(traitsFolder: string, filePath: string): string | null {
 	const prefix = `${normalizePath(traitsFolder)}/`;
 	if (!filePath.startsWith(prefix) || !filePath.endsWith(".md")) {
@@ -220,6 +247,12 @@ export class TraitService {
 	private traitsFolder: string;
 	private tagPrefix: string;
 	private traitDefinitions = new Map<string, TraitDefinition>();
+	/** Last known expanded trait ids per note (for detecting manual tag edits). */
+	private traitSnapshotByPath = new Map<string, string[]>();
+	/** Ignore metadata-driven sync while the plugin is writing tags + properties from the picker. */
+	private applyingTraitSelectionPaths = new Set<string>();
+	/** Avoid re-entrant frontmatter updates for the same file. */
+	private externalPropertySyncPaths = new Set<string>();
 
 	constructor(app: App, options: TraitServiceOptions) {
 		this.app = app;
@@ -241,6 +274,65 @@ export class TraitService {
 
 	getTagPrefix(): string {
 		return this.tagPrefix;
+	}
+
+	private isTraitsDefinitionFile(file: TFile): boolean {
+		const prefix = `${normalizePath(this.traitsFolder)}/`;
+		return file.path.startsWith(prefix);
+	}
+
+	/** Record current trait ids so later manual tag edits can be diffed (skips trait definition notes). */
+	ensureTraitSnapshot(file: TFile): void {
+		if (file.extension !== "md" || this.isTraitsDefinitionFile(file)) {
+			return;
+		}
+		const nextNorm = this.normalizeTraitIdList(this.getTraitsForFile(file));
+		this.traitSnapshotByPath.set(file.path, [...nextNorm]);
+	}
+
+	handleVaultRename(oldPath: string, newPath: string): void {
+		const snap = this.traitSnapshotByPath.get(oldPath);
+		if (snap !== undefined) {
+			this.traitSnapshotByPath.delete(oldPath);
+			this.traitSnapshotByPath.set(newPath, snap);
+		}
+	}
+
+	handleVaultDelete(path: string): void {
+		this.traitSnapshotByPath.delete(path);
+	}
+
+	/**
+	 * When frontmatter/tags change outside the trait picker, sync default / cleanup properties if trait tags changed.
+	 */
+	async handleTraitTagsChangedExternally(file: TFile): Promise<void> {
+		if (file.extension !== "md" || this.isTraitsDefinitionFile(file)) {
+			return;
+		}
+		if (this.applyingTraitSelectionPaths.has(file.path) || this.externalPropertySyncPaths.has(file.path)) {
+			return;
+		}
+
+		const nextNorm = this.normalizeTraitIdList(this.getTraitsForFile(file));
+		const prev = this.traitSnapshotByPath.get(file.path);
+		if (prev === undefined) {
+			this.traitSnapshotByPath.set(file.path, [...nextNorm]);
+			return;
+		}
+		if (sameTraitIdSet(prev, nextNorm)) {
+			this.traitSnapshotByPath.set(file.path, [...nextNorm]);
+			return;
+		}
+
+		this.externalPropertySyncPaths.add(file.path);
+		try {
+			await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+				this.applyPropertyDelta(frontmatter, prev, nextNorm);
+			});
+			this.traitSnapshotByPath.set(file.path, [...nextNorm]);
+		} finally {
+			this.externalPropertySyncPaths.delete(file.path);
+		}
 	}
 
 	getTraitDefinitions(): TraitDefinition[] {
@@ -394,19 +486,89 @@ export class TraitService {
 		return issues.sort((a, b) => a.file.path.localeCompare(b.file.path));
 	}
 
-	async setTraitsForFile(file: TFile, traitNames: string[]): Promise<void> {
-		const normalized = [...new Set(traitNames.map((name) => name.trim()).filter((name) => name.length > 0))];
-		const traitTagsToWrite = minimalTraitIdsForTags(normalized).map((id) => `${this.tagPrefix}/${id}`);
-		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-			const existing = normalizeFrontmatterTags(frontmatter.tags);
-			const kept = existing.filter((t) => !isTraitTag(t, this.tagPrefix));
-			const next = [...kept, ...traitTagsToWrite];
-			if (next.length === 0) {
-				delete frontmatter.tags;
-				return;
+	private normalizeTraitIdList(names: string[]): string[] {
+		return [...new Set(names.map((name) => name.trim()).filter((name) => name.length > 0))];
+	}
+
+	private collectPropertyNamesForTraitIds(traitIds: string[]): Set<string> {
+		const out = new Set<string>();
+		for (const id of traitIds) {
+			const def = this.traitDefinitions.get(id);
+			if (!def) {
+				continue;
 			}
-			frontmatter.tags = next.length === 1 ? next[0] : next;
-		});
+			for (const p of def.properties) {
+				out.add(p.name);
+			}
+		}
+		return out;
+	}
+
+	private applyPropertyDelta(
+		frontmatter: Record<string, unknown>,
+		prevNorm: string[],
+		nextNorm: string[],
+	): void {
+		const prevSet = new Set(prevNorm);
+		const nextSet = new Set(nextNorm);
+
+		const added = nextNorm.filter((id) => !prevSet.has(id));
+		const removed = prevNorm.filter((id) => !nextSet.has(id));
+
+		const remainingPropertyNames = this.collectPropertyNamesForTraitIds(nextNorm);
+		const removedPropertyNames = this.collectPropertyNamesForTraitIds(removed);
+
+		for (const traitId of added) {
+			const def = this.traitDefinitions.get(traitId);
+			if (!def) {
+				continue;
+			}
+			for (const rule of def.properties) {
+				if (frontmatter[rule.name] === undefined || frontmatter[rule.name] === null) {
+					frontmatter[rule.name] = this.defaultValueForType(rule.type);
+				}
+			}
+		}
+
+		for (const propName of removedPropertyNames) {
+			if (remainingPropertyNames.has(propName)) {
+				continue;
+			}
+			if (!isEmptyForTraitRemoval(frontmatter[propName])) {
+				continue;
+			}
+			delete frontmatter[propName];
+		}
+	}
+
+	/**
+	 * Updates trait tags and frontmatter: adds default values for properties of newly applied traits;
+	 * removes only empty frontmatter keys that belonged solely to removed traits (still-defined keys stay).
+	 */
+	async applyTraitSelection(file: TFile, previousTraitIds: string[], nextTraitIds: string[]): Promise<void> {
+		const prevNorm = this.normalizeTraitIdList(previousTraitIds);
+		const nextNorm = this.normalizeTraitIdList(nextTraitIds);
+
+		const traitTagsToWrite = minimalTraitIdsForTags(nextNorm).map((id) => `${this.tagPrefix}/${id}`);
+
+		this.applyingTraitSelectionPaths.add(file.path);
+		try {
+			await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+				this.applyPropertyDelta(frontmatter, prevNorm, nextNorm);
+
+				const existing = normalizeFrontmatterTags(frontmatter.tags);
+				const kept = existing.filter((t) => !isTraitTag(t, this.tagPrefix));
+				const nextTags = [...kept, ...traitTagsToWrite];
+				if (nextTags.length === 0) {
+					delete frontmatter.tags;
+					return;
+				}
+				frontmatter.tags = nextTags.length === 1 ? nextTags[0] : nextTags;
+			});
+			this.traitSnapshotByPath.set(file.path, [...nextNorm]);
+		} finally {
+			this.applyingTraitSelectionPaths.delete(file.path);
+		}
 	}
 
 	async migrateTagPrefix(oldPrefixRaw: string, newPrefixRaw: string): Promise<number> {

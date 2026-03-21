@@ -62,18 +62,36 @@ export default class Traitor extends Plugin {
 		});
 
 		this.registerEvent(
-			this.app.workspace.on("file-open", () => {
+			this.app.workspace.on("file-open", (file) => {
+				if (file instanceof TFile) {
+					this.traitService.ensureTraitSnapshot(file);
+				}
 				this.refreshWarningsForActiveView();
 			}),
 		);
 		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", (leaf) => {
+				const view = leaf?.view;
+				const openFile = view instanceof MarkdownView ? view.file : null;
+				if (openFile instanceof TFile) {
+					this.traitService.ensureTraitSnapshot(openFile);
+				}
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on("rename", (file, oldPath) => {
+				this.traitService.handleVaultRename(oldPath, file.path);
+			}),
+		);
+		this.registerEvent(
 			this.app.metadataCache.on("changed", async (file) => {
-				if (!file.path.startsWith(`${this.traitService.getTraitsFolder()}/`)) {
+				if (file.path.startsWith(`${this.traitService.getTraitsFolder()}/`)) {
+					await this.refreshTraitDefinitions();
 					this.refreshWarningsForActiveView();
 					return;
 				}
 
-				await this.refreshTraitDefinitions();
+				await this.traitService.handleTraitTagsChangedExternally(file);
 				this.refreshWarningsForActiveView();
 			}),
 		);
@@ -94,6 +112,7 @@ export default class Traitor extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on("delete", async (file) => {
+				this.traitService.handleVaultDelete(file.path);
 				if (!(file instanceof TFile) || file.extension !== "md") {
 					return;
 				}
@@ -233,7 +252,8 @@ export default class Traitor extends Plugin {
 			selectedTraits,
 			tagPrefix: this.settings.traitTagPrefix,
 			onSave: async (nextTraits) => {
-				await this.traitService.setTraitsForFile(file, nextTraits);
+				const previousTraits = this.traitService.getTraitsForFile(file);
+				await this.traitService.applyTraitSelection(file, previousTraits, nextTraits);
 				this.refreshWarningsForActiveView();
 				new Notice("Traits updated.");
 			},
