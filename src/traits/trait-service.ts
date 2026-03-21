@@ -380,6 +380,20 @@ export class TraitService {
 		return warnings;
 	}
 
+	collectVaultIssues(options: { warnOnMissingTraits: boolean }): { file: TFile; warnings: TraitValidationWarning[] }[] {
+		const issues: { file: TFile; warnings: TraitValidationWarning[] }[] = [];
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			let warnings = this.validateFile(file);
+			if (!options.warnOnMissingTraits) {
+				warnings = warnings.filter((w) => w.kind !== "missing-definition");
+			}
+			if (warnings.length > 0) {
+				issues.push({ file, warnings });
+			}
+		}
+		return issues.sort((a, b) => a.file.path.localeCompare(b.file.path));
+	}
+
 	async setTraitsForFile(file: TFile, traitNames: string[]): Promise<void> {
 		const normalized = [...new Set(traitNames.map((name) => name.trim()).filter((name) => name.length > 0))];
 		const traitTagsToWrite = minimalTraitIdsForTags(normalized).map((id) => `${this.tagPrefix}/${id}`);

@@ -4,6 +4,7 @@ import { TraitService } from "./traits/trait-service";
 import { TraitPropertyType } from "./traits/types";
 import { CreateTraitModal } from "./ui/create-trait-modal";
 import { TraitPickerModal } from "./ui/trait-picker-modal";
+import { TRAIT_PROBLEMS_VIEW_TYPE, TraitProblemsView } from "./ui/trait-problems-view";
 import { WarningBannerController } from "./ui/warning-banner";
 import "./plugin.css";
 
@@ -33,6 +34,18 @@ export default class Traitor extends Plugin {
 			id: "set-traits-on-current-note",
 			name: "Set traits on current note",
 			callback: () => void this.openTraitPickerForActiveFile(),
+		});
+
+		this.registerView(TRAIT_PROBLEMS_VIEW_TYPE, (leaf) => new TraitProblemsView(leaf, this));
+
+		this.addCommand({
+			id: "show-trait-problems",
+			name: "Show trait problems",
+			callback: () => void this.openTraitProblemsView(),
+		});
+
+		this.addRibbonIcon("alert-triangle", "Open trait problems", () => {
+			void this.openTraitProblemsView();
 		});
 
 		this.addCommand({
@@ -99,6 +112,28 @@ export default class Traitor extends Plugin {
 
 	onunload() {
 		this.clearAllWarningBanners();
+		this.app.workspace.detachLeavesOfType(TRAIT_PROBLEMS_VIEW_TYPE);
+	}
+
+	getTraitService(): TraitService {
+		return this.traitService;
+	}
+
+	async openTraitProblemsView(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(TRAIT_PROBLEMS_VIEW_TYPE)[0];
+		if (existing) {
+			workspace.revealLeaf(existing);
+			const view = existing.view;
+			if (view instanceof TraitProblemsView) {
+				await view.refresh();
+			}
+			return;
+		}
+
+		const leaf = workspace.getRightLeaf(false) ?? workspace.getLeaf(true);
+		await leaf.setViewState({ type: TRAIT_PROBLEMS_VIEW_TYPE, active: true });
+		workspace.revealLeaf(leaf);
 	}
 
 	async loadSettings() {

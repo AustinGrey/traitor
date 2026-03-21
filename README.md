@@ -16,6 +16,7 @@ Traitor helps you keep metadata consistent across your vault. You assign traits 
 - Adds a ribbon action and command to set traits on the current note
 - Lets you create trait definition files from inside Obsidian
 - Validates notes against trait-defined property rules
+- Provides a **Traitor trait problems** side pane that lists validation issues across the vault (ribbon icon or command)
 - Shows clear warnings when:
   - a trait tag is present but has no definition file
   - a required property is missing
@@ -106,6 +107,7 @@ email: hello@example.com
 ## Commands
 
 - **Set traits on current note**
+- **Show trait problems**
 - **Create trait definition file**
 
 ## Settings
