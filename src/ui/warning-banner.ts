@@ -6,8 +6,8 @@ import WarningBanner from "./WarningBanner.vue";
 const MOUNT_CLASS = "traitor-warning-banner-mount";
 
 export interface WarningBannerCallbacks {
-	onCreateTrait?: (traitName: string) => void;
-	onAddProperty?: (propertyName: string, propertyType: TraitPropertyType) => void;
+	onCreateTrait?: (traitName: string) => Promise<void>;
+	onAddProperty?: (propertyName: string, propertyType: TraitPropertyType) => Promise<void>;
 }
 
 export class WarningBannerController {
