@@ -21,11 +21,9 @@ export class TraitorSettingsTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Traitor settings" });
-
 		new Setting(containerEl)
 			.setName("Traits folder")
-			.setDesc("Folder that contains trait definition markdown files.")
+			.setDesc("Folder that contains trait definition Markdown files.")
 			.addText((text) =>
 				text
 					.setPlaceholder("Traits")

@@ -1,3 +1,8 @@
+/*
+This file is for plugin styles which can not be placed into a component for one reason or another.
+You should never put styles in here which could be scoped to a component instead.
+ */
+
 /* Hide properties editor row for the traits key so users interact via plugin UI. */
 .metadata-properties .metadata-property[data-property-key="traits"],
 .metadata-property[data-property-key="traits"] {

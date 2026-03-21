@@ -153,7 +153,7 @@ export default class Traitor extends Plugin {
 	private async openTraitPickerForActiveFile(): Promise<void> {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view || !view.file) {
-			new Notice("Open a markdown note first.");
+			new Notice("Open a Markdown note first.");
 			return;
 		}
 
